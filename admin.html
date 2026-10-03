@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Timetable upload</title>
+<style>
+:root { --paper:#f1f3ef; --surface:#fff; --ink:#1b2230; --ink-soft:#566074; --line:#cfd5cd; --brand:#23407a; --brand-ink:#fff; --bad:#c0262d; --ok:#2f7050; --warn:#9a6200; }
+@media (prefers-color-scheme: dark) { :root { --paper:#12161d; --surface:#1a2029; --ink:#e9ecf1; --ink-soft:#9aa5b8; --line:#333c4a; --brand:#8fb0ff; --brand-ink:#0d1626; --bad:#ff6b72; --ok:#5fc08c; --warn:#e8b04f; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 56px; }
+h1 { margin: 0 0 4px; font-size: 1.8rem; }
+h2 { margin: 0 0 8px; font-size: 1.1rem; }
+p { margin: 0 0 8px; }
+.soft { color: var(--ink-soft); }
+.card { background: var(--surface); border: 1.5px solid var(--ink); border-radius: 10px; padding: 16px; margin: 16px 0; }
+.btn { border: 1.5px solid var(--ink); background: transparent; color: inherit; border-radius: 6px; padding: 8px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.drop { display: block; cursor: pointer; border: 2px dashed var(--line); border-radius: 10px; padding: 28px 16px; text-align: center; }
+.drop.over { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, transparent); }
+.drop input { display: none; }
+ul.plain { margin: 6px 0 0; padding-left: 18px; }
+.msg-bad { color: var(--bad); font-weight: 600; }
+.msg-ok { color: var(--ok); font-weight: 600; }
+.msg-warn { color: var(--warn); }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 8px 0 12px; }
+.stats b { display: block; font-size: 1.4rem; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .82rem; min-width: 860px; }
+th, td { border: 1px solid var(--line); padding: 4px 6px; vertical-align: top; text-align: left; }
+thead th { background: var(--ink); color: var(--paper); }
+td .c { margin-bottom: 3px; }
+td .c small { display: block; color: var(--ink-soft); }
+td .c em { font-style: normal; font-weight: 700; color: var(--ink-soft); }
+td.note { font-weight: 700; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Timetable upload</h1>
+  <p class="soft">Drop in the weekly PDF, check the preview against it, then download the updated data file and replace <code>data/weeks.js</code> on your host.</p>
+
+  <section class="card">
+    <h2>Published weeks</h2>
+    <div id="current" class="soft">Loading</div>
+  </section>
+
+  <section class="card">
+    <h2>New week</h2>
+    <label class="drop" id="drop" for="file">
+      <p><b>Choose the weekly timetable PDF</b></p>
+      <p class="soft">or drop it here. The file stays in your browser.</p>
+      <input id="file" type="file" accept="application/pdf,.pdf">
+    </label>
+    <p id="status" class="soft" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <h2 id="rtitle"></h2>
+    <div class="stats" id="stats"></div>
+    <div id="warns"></div>
+    <p class="soft">Preview of everything read from the PDF. Compare it with the PDF before publishing.</p>
+    <div class="scroll"><table id="preview"></table></div>
+    <p style="margin-top:14px"><button class="btn primary" id="download" type="button">Download weeks.js</button></p>
+    <p class="soft" id="howto"></p>
+  </section>
+</div>
+
+<script src="vendor/pdf.min.js"></script>
+<script src="data/weeks.js" onerror="window.__noData=true"></script>
+<script>
+(function () {
+  "use strict";
+  var pdfjsLib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
+
+  var EXISTING = window.TIMETABLE_DATA || { weeks: [] };
+  var DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  var MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  var SCALE = 2;
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) { if (k === "text") e.textContent = attrs[k]; else if (k === "class") e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    for (var i = 2; i < arguments.length; i++) { var c = arguments[i]; if (c != null) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); }
+    return e;
+  }
+  function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function iso(d) { return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()); }
+  function addDays(isoStr, n) { var p = isoStr.split("-"); var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return iso(d); }
+
+  /* ------------------------------------------------------------------
+     1. Read each PDF page: text items with positions, and a dark-pixel map
+     ------------------------------------------------------------------ */
+  async function readPages(buffer) {
+    var pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    var pages = [];
+    for (var n = 1; n <= pdf.numPages; n++) {
+      var page = await pdf.getPage(n);
+      var vp = page.getViewport({ scale: SCALE });
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+      var ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      var w = canvas.width, h = canvas.height, dark = new Uint8Array(w * h);
+      for (var i = 0, j = 0; i < img.length; i += 4, j++) dark[j] = (0.299 * img[i] + 0.587 * img[i + 1] + 0.114 * img[i + 2]) < 110 ? 1 : 0;
+
+      var tc = await page.getTextContent(), items = [];
+      tc.items.forEach(function (it) {
+        if (!it.str || !it.str.trim()) return;
+        var tx = pdfjsLib.Util.transform(vp.transform, it.transform);
+        var hgt = Math.hypot(tx[2], tx[3]), norm = Math.hypot(tx[0], tx[1]) || 1;
+        var ux = tx[0] / norm, uy = tx[1] / norm, len = it.width * SCALE;
+        items.push({
+          str: it.str, x0: tx[4], y0: tx[5], ux: ux, uy: uy, len: len, hgt: hgt,
+          horiz: Math.abs(uy) < 0.3,
+          cx: tx[4] + ux * len / 2 + uy * hgt * 0.3,
+          cy: tx[5] + uy * len / 2 - ux * hgt * 0.3
+        });
+      });
+      pages.push({ w: w, h: h, dark: dark, items: items });
+    }
+    return pages;
+  }
+
+  /* ------------------------------------------------------------------
+     2. Find the table borders from the rendered page
+     ------------------------------------------------------------------ */
+  function cluster(vals, gap) {
+    var out = [], cur = null;
+    vals.forEach(function (v) {
+      if (cur && v - cur.max <= gap) { cur.max = v; } else { cur = { min: v, max: v }; out.push(cur); }
+    });
+    return out.map(function (c) { return (c.min + c.max) / 2; });
+  }
+  function verticalLines(pg) {
+    var w = pg.w, h = pg.h, best = new Int32Array(w), top = new Int32Array(w).fill(h), bot = new Int32Array(w);
+    for (var x = 0; x < w; x++) {
+      var run = 0, runStart = 0;
+      for (var y = 0; y < h; y++) {
+        if (pg.dark[y * w + x]) { if (!run) runStart = y; run++; if (run > best[x]) { best[x] = run; top[x] = runStart; bot[x] = y; } }
+        else run = 0;
+      }
+    }
+    /* The outer border gives the table height; inner column lines may be drawn in
+       segments, so count dark pixels over that height instead of one unbroken run. */
+    var max = 0, outer = 0; for (x = 0; x < w; x++) if (best[x] > max) { max = best[x]; outer = x; }
+    var t = top[outer], b = bot[outer], height = b - t, xs = [];
+    for (x = 0; x < w; x++) {
+      var n = 0; for (y = t; y <= b; y++) n += pg.dark[y * w + x];
+      if (n >= 0.8 * height) xs.push(x);
+    }
+    return { xs: cluster(xs, 3), top: t, bottom: b };
+  }
+  function horizontalLines(pg, x0, x1, top, bottom) {
+    var w = pg.w, a = Math.round(x0) + 4, b = Math.round(x1) - 4, ys = [];
+    for (var y = Math.max(0, Math.floor(top) - 3); y <= Math.min(pg.h - 1, Math.ceil(bottom) + 3); y++) {
+      var n = 0; for (var x = a; x < b; x++) n += pg.dark[y * w + x];
+      if (n >= 0.85 * (b - a)) ys.push(y);
+    }
+    return cluster(ys, 3);
+  }
+  function blocks(borders) {
+    var out = [];
+    for (var i = 0; i + 1 < borders.length; i++) if (borders[i + 1] - borders[i] > 12) out.push({ y0: borders[i], y1: borders[i + 1] });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------
+     3. Text helpers
+     ------------------------------------------------------------------ */
+  function inBox(it, x0, x1, y0, y1) { return it.cx >= x0 && it.cx < x1 && it.cy >= y0 && it.cy < y1; }
+  function textLines(items) {
+    var hs = items.filter(function (i) { return i.horiz; }).sort(function (a, b) { return a.cy - b.cy || a.cx - b.cx; });
+    var lines = [];
+    hs.forEach(function (it) {
+      var last = lines[lines.length - 1];
+      if (last && Math.abs(last.cy - it.cy) < 0.5 * it.hgt) last.items.push(it);
+      else lines.push({ cy: it.cy, items: [it] });
+    });
+    return lines.map(function (ln) {
+      ln.items.sort(function (a, b) { return a.cx - b.cx; });
+      var s = "", prevEnd = null;
+      ln.items.forEach(function (it) {
+        if (prevEnd !== null && it.x0 - prevEnd > 0.3 * it.hgt && !/^\s/.test(it.str)) s += " ";
+        s += it.str; prevEnd = it.x0 + it.len;
+      });
+      return s.replace(/\s+/g, " ").trim();
+    });
+  }
+  function rotatedText(items) {
+    var v = items.filter(function (i) { return !i.horiz; });
+    if (!v.length) return "";
+    var up = v[0].uy < 0;
+    v.sort(function (a, b) { return up ? b.cy - a.cy : a.cy - b.cy; });
+    return v.map(function (i) { return i.str; }).join("").replace(/\s+/g, " ").trim();
+  }
+
+  /* ------------------------------------------------------------------
+     4. Parse the week
+     ------------------------------------------------------------------ */
+  var CELL = /^\s*([A-Za-z0-9]+)\s*-\s*([A-Z])\s*\(\s*(\d+)\s*\)\s*\n\s*(.+?)\s*\{(.+)\}\s*$/;
+  var COMMON = /^\s*([A-Za-z0-9]+)\s*\(\s*(\d+)\s*\)\s*\n\s*(.+?)\s*\{(.+)\}\s*$/;
+
+  function knownAreas() {
+    var set = { MKT: 1, FIN: 1, HRM: 1, OPR: 1, BA: 1, ITM: 1, SIE: 1 };
+    EXISTING.weeks.forEach(function (w) { w.days.forEach(function (d) { d.classes.forEach(function (c) { if (c.area && c.area !== "ALL") set[c.area] = 1; }); }); });
+    return set;
+  }
+  function fixArea(s, known) {
+    s = s.replace(/\s+/g, "");
+    if (known[s]) return s;
+    var r = s.split("").reverse().join("");
+    return known[r] ? r : s;
+  }
+  function parseDayLabel(s) {
+    var wd = /(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.exec(s);
+    var m = /([A-Za-z]{3})[a-z]*\.?,?\s*(\d{1,2}),?\s*(\d{4})/.exec(s);
+    var date = null;
+    if (m && MONTHS.indexOf(m[1].toLowerCase()) >= 0) date = m[3] + "-" + pad(MONTHS.indexOf(m[1].toLowerCase()) + 1) + "-" + pad(+m[2]);
+    return { wd: wd ? DAY_NAMES.indexOf(wd[1][0].toUpperCase() + wd[1].slice(1).toLowerCase()) : -1, date: date, raw: s };
+  }
+
+  function parseWeek(pages) {
+    var warnings = [], known = knownAreas(), days = [], slots = null, headerLines = [], textBraces = 0;
+
+    pages.forEach(function (pg, pi) {
+      pg.items.forEach(function (it) { var m = it.str.match(/\{/g); if (m) textBraces += m.length; });
+      var vl = verticalLines(pg);
+      if (vl.xs.length !== 10) throw new Error("Page " + (pi + 1) + ": expected 9 table columns (day, area and 7 time slots) but found " + (vl.xs.length - 1) + ". Is this the usual template?");
+      var v = vl.xs;
+      var slotB = horizontalLines(pg, v[2], v[9], vl.top, vl.bottom);
+      var areaB = horizontalLines(pg, v[1], v[2], vl.top, vl.bottom);
+      var dayB = horizontalLines(pg, v[0], v[1], vl.top, vl.bottom);
+      var slotBlocks = blocks(slotB);
+      if (slotBlocks.length < 2) throw new Error("Page " + (pi + 1) + ": could not find table rows.");
+      var header = slotBlocks[0], rows = slotBlocks.slice(1);
+
+      if (pi === 0) headerLines = textLines(pg.items.filter(function (i) { return i.cy < header.y0 - 2; }));
+      if (!slots) {
+        slots = [];
+        for (var c = 0; c < 7; c++) {
+          var hi = pg.items.filter(function (i) { return inBox(i, v[2 + c], v[3 + c], header.y0, header.y1); });
+          slots.push(textLines(hi).join(" "));
+        }
+      }
+
+      var dayBlocks = blocks(dayB).filter(function (b) { return b.y0 >= header.y1 - 4; });
+      var areaBlocks = blocks(areaB).filter(function (b) { return b.y0 >= header.y1 - 4; });
+      var dayObjs = dayBlocks.map(function (b, k) {
+        var label = rotatedText(pg.items.filter(function (i) { return inBox(i, v[0], v[1], b.y0, b.y1); }));
+        if (!label) {
+          label = textLines(pg.items.filter(function (i) { return inBox(i, v[0], v[1], b.y0, b.y1); })).join(" ");
+        }
+        var info = parseDayLabel(label), obj;
+        if (!label && days.length && k === 0 && pi > 0) obj = days[days.length - 1];
+        else { obj = { info: info, classes: [], note: null }; days.push(obj); }
+        return { b: b, obj: obj };
+      });
+      var areaNames = areaBlocks.map(function (b) {
+        var lab = rotatedText(pg.items.filter(function (i) { return inBox(i, v[1], v[2], b.y0, b.y1); }));
+        return { b: b, name: lab ? fixArea(lab, known) : null };
+      });
+
+      rows.forEach(function (r) {
+        var mid = (r.y0 + r.y1) / 2;
+        var dayHit = dayObjs.filter(function (d) { return mid >= d.b.y0 && mid < d.b.y1; })[0];
+        var areaHit = areaNames.filter(function (a) { return mid >= a.b.y0 && mid < a.b.y1; })[0];
+        if (!dayHit) { warnings.push("A row on page " + (pi + 1) + " does not belong to any day block and was skipped."); return; }
+        var day = dayHit.obj, area = areaHit && areaHit.name, parsed = 0, leftovers = [];
+        /* a blank area cell means the row belongs to the area above it, on the same day */
+        if (area) day.lastArea = area; else area = day.lastArea || null;
+        for (var c = 0; c < 7; c++) {
+          var its = pg.items.filter(function (i) { return inBox(i, v[2 + c], v[3 + c], r.y0, r.y1); });
+          if (!its.length) continue;
+          var text = textLines(its).join("\n"), m;
+          if ((m = CELL.exec(text))) {
+            day.classes.push({ slot: c, area: area || "?", course: m[1], section: m[2], session: +m[3], faculty: m[4].trim(), room: m[5].trim().replace(/\s*-\s*/g, "-") });
+            parsed++;
+          } else if ((m = COMMON.exec(text))) {
+            day.classes.push({ slot: c, area: "ALL", course: m[1], section: "", session: +m[2], faculty: m[3].trim(), room: m[4].trim().replace(/\s*-\s*/g, "-"), common: true });
+            parsed++;
+          } else leftovers.push({ c: c, text: text.replace(/\n/g, " ") });
+        }
+        if (leftovers.length) {
+          if (!parsed && !day.classes.length) day.note = ((day.note ? day.note + " " : "") + leftovers.map(function (l) { return l.text; }).join(" ")).trim();
+          else leftovers.forEach(function (l) { warnings.push("Could not read a cell (" + (day.info.raw || "day") + ", slot " + (l.c + 1) + "): \"" + l.text + "\""); });
+        }
+        if (!area && parsed) warnings.push("No area found for a row on " + (day.info.raw || "a day") + ".");
+      });
+    });
+
+    /* dates: anchor on any day that carries a full date */
+    var anchor = days.filter(function (d) { return d.info.date && d.info.wd >= 0; })[0];
+    if (!anchor) throw new Error("No dates found in the day column.");
+    var monday = addDays(anchor.info.date, -anchor.info.wd);
+    var outDays = days.map(function (d, i) {
+      var wd = d.info.wd >= 0 ? d.info.wd : i;
+      var date = addDays(monday, wd);
+      if (d.info.date && d.info.date !== date) warnings.push("Date on " + d.info.raw + " does not fit the week.");
+      var p = date.split("-"), dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+      var label = d.info.date ? d.info.raw : DAY_NAMES[wd] + ", " + dt.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }) + ". " + p[2] + ", " + p[0];
+      return { date: date, name: DAY_NAMES[wd], label: label, note: d.note, classes: d.classes };
+    });
+    if (outDays.length !== 7) warnings.push("Found " + outDays.length + " days instead of 7.");
+
+    /* a course that moved to another area compared with earlier weeks is worth a look */
+    var seen = {};
+    EXISTING.weeks.forEach(function (x) { x.days.forEach(function (d) { d.classes.forEach(function (c) { if (!c.common) seen[c.course] = c.area; }); }); });
+    var flagged = {};
+    outDays.forEach(function (d) { d.classes.forEach(function (c) {
+      if (!c.common && seen[c.course] && seen[c.course] !== c.area && !flagged[c.course]) {
+        flagged[c.course] = 1; warnings.push(c.course + " is under " + c.area + " here but was under " + seen[c.course] + " in an earlier week.");
+      }
+    }); });
+
+    var head = headerLines.join("\n");
+    var wk = /Week\s*-?\s*(\d+)/i.exec(head), term = /Term\s*-?\s*([A-Za-z0-9]+)/i.exec(head), years = /\[(\d{4}-\d{2})\]/.exec(head);
+    var title = (/Term[^\n]*/i.exec(head) || [""])[0];
+    var institute = (headerLines[0] || "").toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }).replace(/\bOf\b/, "of");
+    var total = outDays.reduce(function (n, d) { return n + d.classes.length; }, 0);
+    if (total !== textBraces) warnings.push("The PDF has " + textBraces + " cells with a faculty and room, but " + total + " were read.");
+    if (!wk) warnings.push("Week number not found in the PDF heading.");
+
+    return {
+      week: {
+        id: monday, label: wk ? "Week " + wk[1] : "Week of " + monday, title: title, institute: institute,
+        programme: years ? "PGDM " + years[1] : "", term: term ? "Term " + term[1] : "",
+        start: monday, end: addDays(monday, 6), slots: slots, days: outDays
+      },
+      warnings: warnings, total: total, braces: textBraces
+    };
+  }
+
+  /* ------------------------------------------------------------------
+     5. UI
+     ------------------------------------------------------------------ */
+  var lastMerged = null;
+
+  function renderCurrent() {
+    var box = $("current"); clear(box);
+    if (!EXISTING.weeks.length) { box.textContent = window.__noData ? "No data/weeks.js found next to this page. The download will contain only the new week." : "None yet."; return; }
+    var ul = el("ul", { class: "plain" });
+    EXISTING.weeks.forEach(function (w) { ul.appendChild(el("li", { text: w.label + ", " + w.start + " to " + w.end })); });
+    box.appendChild(ul);
+  }
+
+  function renderResult(res) {
+    var w = res.week;
+    $("result").hidden = false;
+    $("rtitle").textContent = w.label + ", " + w.start + " to " + w.end;
+    var st = $("stats"); clear(st);
+    var courses = {}; w.days.forEach(function (d) { d.classes.forEach(function (c) { courses[c.course + "-" + c.section] = 1; }); });
+    [["Classes read", res.total], ["Course sections", Object.keys(courses).length], ["Days", w.days.length]].forEach(function (p) {
+      st.appendChild(el("div", null, el("b", { text: String(p[1]) }), p[0]));
+    });
+    var wb = $("warns"); clear(wb);
+    var replaces = EXISTING.weeks.some(function (x) { return x.id === w.id; });
+    wb.appendChild(el("p", { class: replaces ? "msg-warn" : "msg-ok", text: replaces ? "This replaces the " + w.label + " already published." : "This adds a new week." }));
+    if (res.warnings.length) {
+      var ul = el("ul", { class: "plain msg-bad" });
+      res.warnings.forEach(function (m) { ul.appendChild(el("li", { text: m })); });
+      wb.appendChild(el("p", { class: "msg-bad", text: "Check these before publishing:" })); wb.appendChild(ul);
+    } else wb.appendChild(el("p", { class: "msg-ok", text: "Every cell with a faculty and room was read (" + res.braces + " of " + res.braces + ")." }));
+    var prevSlots = EXISTING.weeks.length ? EXISTING.weeks[EXISTING.weeks.length - 1].slots : null;
+    if (prevSlots && prevSlots.join("|").replace(/\s/g, "") !== w.slots.join("|").replace(/\s/g, "")) wb.appendChild(el("p", { class: "msg-warn", text: "The time slots differ from the last published week." }));
+
+    var t = $("preview"); clear(t);
+    var hr = el("tr", null, el("th", { text: "Day" })); w.slots.forEach(function (s) { hr.appendChild(el("th", { text: s })); });
+    t.appendChild(el("thead", null, hr));
+    var tb = el("tbody");
+    w.days.forEach(function (d) {
+      var tr = el("tr", null, el("th", { text: d.name + " " + d.date.slice(5) }));
+      if (d.note && !d.classes.length) tr.appendChild(el("td", { class: "note", colspan: "7", text: d.note }));
+      else for (var c = 0; c < 7; c++) {
+        var td = el("td");
+        d.classes.filter(function (x) { return x.slot === c; }).forEach(function (x) {
+          td.appendChild(el("div", { class: "c" }, el("em", { text: x.area === "ALL" ? "" : x.area + " " }), (x.common ? x.course : x.course + "-" + x.section) + "(" + x.session + ")", el("small", { text: x.faculty + "{" + x.room + "}" })));
+        });
+        tr.appendChild(td);
+      }
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+
+    var merged = { weeks: EXISTING.weeks.filter(function (x) { return x.id !== w.id; }).concat([w]).sort(function (a, b) { return a.start < b.start ? -1 : 1; }) };
+    lastMerged = "window.TIMETABLE_DATA = " + JSON.stringify(merged, null, 1) + ";\n";
+    $("howto").textContent = "Then replace data/weeks.js on your host with the downloaded file. The student page picks it up on the next load.";
+    window.__lastResult = { week: w, warnings: res.warnings, merged: merged };
+  }
+
+  async function handle(file) {
+    var s = $("status"); s.className = "soft"; s.textContent = "Reading " + file.name + "...";
+    $("result").hidden = true;
+    try {
+      var buf = await file.arrayBuffer();
+      var pages = await readPages(new Uint8Array(buf));
+      var res = parseWeek(pages);
+      s.textContent = "Done. " + res.total + " classes read.";
+      renderResult(res);
+    } catch (e) {
+      s.className = "msg-bad"; s.textContent = "Could not read this PDF. " + e.message;
+      window.__lastError = e.message;
+    }
+  }
+
+  $("file").addEventListener("change", function () { if (this.files[0]) handle(this.files[0]); });
+  var drop = $("drop");
+  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function (e) { var f = e.dataTransfer.files[0]; if (f) handle(f); });
+  $("download").addEventListener("click", function () {
+    if (!lastMerged) return;
+    var a = el("a", { href: URL.createObjectURL(new Blob([lastMerged], { type: "text/javascript" })), download: "weeks.js" });
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  renderCurrent();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My timetable</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f1f3ef;
+  --surface: #ffffff;
+  --ink: #1b2230;
+  --ink-soft: #566074;
+  --line: #cfd5cd;
+  --line-strong: #1b2230;
+  --brand: #23407a;
+  --brand-ink: #ffffff;
+  --clash: #c0262d;
+  --today: #fff4c2;
+  --a-MKT: #c23b55;
+  --a-FIN: #2f7050;
+  --a-HRM: #7a5ba8;
+  --a-OPR: #b97a14;
+  --a-BA: #1c7a8c;
+  --a-ITM: #3a5ba3;
+  --a-SIE: #8a5a44;
+  --a-ALL: #2b84b3;
+  --a-other: #5a6475;
+  --tint: 13%;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12161d;
+    --surface: #1a2029;
+    --ink: #e9ecf1;
+    --ink-soft: #9aa5b8;
+    --line: #333c4a;
+    --line-strong: #e9ecf1;
+    --brand: #8fb0ff;
+    --brand-ink: #0d1626;
+    --clash: #ff6b72;
+    --today: #3a3410;
+    --a-MKT: #f07b92;
+    --a-FIN: #5fc08c;
+    --a-HRM: #b99cf0;
+    --a-OPR: #e8b04f;
+    --a-BA: #5cc3d6;
+    --a-ITM: #86a6f0;
+    --a-SIE: #d3a088;
+    --a-ALL: #6cc0ec;
+    --a-other: #a2adc0;
+    --tint: 20%;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; padding: 24px 0 16px; }
+h1 { margin: 0; font-size: clamp(1.6rem, 4.5vw, 2.4rem); line-height: 1.05; font-weight: 800; font-stretch: 112%; letter-spacing: -0.01em; }
+.sub { margin: 4px 0 0; color: var(--ink-soft); }
+.actions { display: flex; gap: 8px; }
+.btn { border: 1.5px solid var(--line-strong); background: transparent; border-radius: 6px; padding: 7px 14px; font-weight: 600; }
+.btn:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.primary:hover { background: color-mix(in srgb, var(--brand) 88%, black); }
+.btn.quiet { border-color: var(--line); font-weight: 500; }
+
+/* weeks */
+.weeks { display: flex; gap: 0; overflow-x: auto; border-bottom: 2px solid var(--line-strong); margin-bottom: 20px; }
+.week { border: 0; background: transparent; padding: 10px 18px 9px; text-align: left; white-space: nowrap; border-bottom: 5px solid transparent; margin-bottom: -2px; }
+.week b { display: block; font-weight: 700; }
+.week span { color: var(--ink-soft); font-size: 0.86rem; }
+.week[aria-pressed="true"] { border-bottom-color: var(--brand); }
+.week[aria-pressed="true"] b { color: var(--brand); }
+
+/* picker */
+.picker { background: var(--surface); border: 1.5px solid var(--line-strong); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+.picker-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.picker-head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; font-stretch: 108%; }
+.picker-head p { margin: 2px 0 0; color: var(--ink-soft); font-size: 0.9rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip { --a: var(--a-other); display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 12px; font-weight: 700; border: 1.5px solid var(--a); color: var(--a); background: color-mix(in srgb, var(--a) var(--tint), var(--surface)); }
+.areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px 28px; margin-top: 16px; }
+.area { --a: var(--a-other); }
+.area h3 { margin: 0 0 6px; font-size: 0.95rem; font-weight: 800; font-stretch: 112%; color: var(--a); border-bottom: 3px solid var(--a); padding-bottom: 4px; }
+.course { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.course:last-child { border-bottom: 0; }
+.course .code { font-weight: 700; }
+.secs { display: flex; gap: 6px; }
+.sec { min-width: 40px; height: 36px; border-radius: 6px; border: 1.5px solid var(--line-strong); background: transparent; font-weight: 700; }
+.sec:hover { background: color-mix(in srgb, var(--a) 14%, transparent); }
+.sec[aria-pressed="true"] { background: var(--a); border-color: var(--a); color: #fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sec[aria-pressed="true"] { color: #10141b; } }
+.hint { color: var(--ink-soft); font-size: 0.88rem; margin: 14px 0 0; }
+
+/* banners */
+.banner { border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; border: 1.5px solid var(--line-strong); background: var(--surface); }
+.banner.clash { border-color: var(--clash); background: color-mix(in srgb, var(--clash) 10%, var(--surface)); }
+.banner b { font-weight: 800; }
+.banner ul { margin: 6px 0 0; padding-left: 18px; }
+.empty { border: 2px dashed var(--line); border-radius: 10px; padding: 36px 20px; text-align: center; color: var(--ink-soft); }
+
+/* grid (desktop) */
+.gridwrap { display: none; }
+.agenda { display: block; }
+@media (min-width: 900px) { .gridwrap { display: block; } .agenda { display: none; } }
+table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--surface); border: 2px solid var(--line-strong); }
+.grid th, .grid td { border: 1px solid var(--line); padding: 6px; vertical-align: top; }
+.grid thead th { background: var(--ink); color: var(--paper); font-weight: 700; font-size: 0.82rem; text-align: center; border-color: var(--ink); padding: 8px 4px; }
+.grid thead th:first-child { width: 78px; }
+.grid tbody th { background: color-mix(in srgb, var(--ink) 6%, var(--surface)); text-align: left; font-weight: 800; width: 78px; border-right: 2px solid var(--line-strong); }
+.grid tbody th span { display: block; font-weight: 500; color: var(--ink-soft); font-size: 0.8rem; }
+.grid tr.day-start > * { border-top: 2px solid var(--line-strong); }
+.grid tr.today th, .grid tr.today td.free { background: var(--today); }
+.grid td { height: 64px; }
+.grid td.free-all { text-align: center; vertical-align: middle; color: var(--ink-soft); height: 44px; }
+.grid td.note { text-align: center; vertical-align: middle; font-weight: 800; font-size: 1.05rem; background: color-mix(in srgb, var(--a-ALL) var(--tint), var(--surface)); height: 60px; }
+
+.cls { --a: var(--a-other); border-left: 5px solid var(--a); background: color-mix(in srgb, var(--a) var(--tint), var(--surface)); border-radius: 3px; padding: 4px 7px; }
+.cls + .cls { margin-top: 4px; }
+.cls .name { font-weight: 800; font-size: 1.02rem; line-height: 1.15; }
+.cls .name i { font-style: normal; font-weight: 500; }
+.cls .who { font-stretch: 75%; font-size: 0.86rem; color: var(--ink-soft); line-height: 1.2; overflow-wrap: anywhere; }
+.cls.common { --a: var(--a-ALL); }
+.cls.clash { outline: 2px solid var(--clash); outline-offset: -1px; background: color-mix(in srgb, var(--clash) 10%, var(--surface)); }
+.cls .tag { display: inline-block; margin-left: 6px; font-size: 0.7rem; font-weight: 800; color: #fff; background: var(--clash); border-radius: 3px; padding: 0 5px; vertical-align: 2px; }
+
+/* agenda (mobile) */
+.day { background: var(--surface); border: 1.5px solid var(--line-strong); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+.day.today { border-width: 3px; }
+.day h3 { margin: 0; padding: 9px 14px; font-size: 1rem; font-weight: 800; font-stretch: 108%; display: flex; justify-content: space-between; align-items: center; background: color-mix(in srgb, var(--ink) 6%, var(--surface)); border-bottom: 1.5px solid var(--line-strong); }
+.day.today h3 { background: var(--today); }
+.day h3 small { font-weight: 700; font-size: 0.78rem; background: var(--ink); color: var(--paper); border-radius: 999px; padding: 1px 9px; }
+.slot { display: grid; grid-template-columns: 78px 1fr; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); }
+.slot:first-of-type { border-top: 0; }
+.slot time { font-weight: 700; font-size: 0.88rem; line-height: 1.25; }
+.slot time span { display: block; color: var(--ink-soft); font-weight: 500; }
+.day .none { padding: 10px 14px; color: var(--ink-soft); }
+.day .noteline { padding: 14px; font-weight: 800; background: color-mix(in srgb, var(--a-ALL) var(--tint), var(--surface)); }
+
+footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
+
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  body { background: #fff; color: #000; }
+  .top .actions, .weeks .week:not([aria-pressed="true"]), .picker, #nextbox { display: none !important; }
+  .gridwrap { display: block !important; } .agenda { display: none !important; }
+  .weeks { border-bottom: 0; margin-bottom: 8px; }
+  .grid td { height: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>My timetable</h1>
+      <p class="sub" id="term"></p>
+    </div>
+    <div class="actions">
+      <button class="btn quiet" id="copy" type="button">Copy link</button>
+      <button class="btn quiet" id="print" type="button">Print</button>
+    </div>
+  </header>
+
+  <nav class="weeks" id="weeks" aria-label="Week"></nav>
+  <section class="picker" id="picker" aria-label="Your courses"></section>
+  <div id="nextbox"></div>
+  <div id="clashbox"></div>
+  <main id="out" aria-live="polite"></main>
+  <footer id="foot"></footer>
+</div>
+
+<script src="data/weeks.js"></script>
+<script>
+(function () {
+  "use strict";
+  var DATA = window.TIMETABLE_DATA || { weeks: [] };
+  var AREA_ORDER = ["MKT", "FIN", "HRM", "OPR", "BA", "ITM", "SIE"];
+  var FULL_DAY = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
+  var STORE = "timetable.courses.v1";
+
+  var state = { sel: new Set(), weekId: null, editing: true };
+
+  /* ---------- helpers ---------- */
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "class") el.className = attrs[k];
+      else if (k === "text") el.textContent = attrs[k];
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), attrs[k]);
+      else if (attrs[k] !== false && attrs[k] != null) el.setAttribute(k, attrs[k]);
+    }
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c == null || c === false) continue;
+      el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    }
+    return el;
+  }
+  function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+  function key(c) { return c.course + "-" + c.section; }
+  function areaVar(a) { return AREA_ORDER.indexOf(a) >= 0 || a === "ALL" ? "var(--a-" + a + ")" : "var(--a-other)"; }
+  function code(c) { return c.common ? c.course + "(" + c.session + ")" : c.course + "-" + c.section + "(" + c.session + ")"; }
+  function who(c) { return c.faculty + "{" + c.room + "}"; }
+  function dmy(iso, opts) { return new Date(iso + "T00:00:00").toLocaleDateString("en-GB", opts || { day: "numeric", month: "short" }); }
+  function range(w) {
+    var a = new Date(w.start + "T00:00:00"), b = new Date(w.end + "T00:00:00");
+    var m1 = a.toLocaleDateString("en-GB", { month: "short" }), m2 = b.toLocaleDateString("en-GB", { month: "short" });
+    return m1 === m2 ? a.getDate() + "–" + b.getDate() + " " + m2 : a.getDate() + " " + m1 + "–" + b.getDate() + " " + m2;
+  }
+  function slotLabel(s) { return s.replace(/\s*-\s*/, "–"); }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function todayISO() { var d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function parseSlot(label) {
+    var m = /(\d{1,2}):(\d{2})\s*(am|pm)?\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)/i.exec(label);
+    if (!m) return null;
+    function to24(hh, mm, mer) { hh = +hh % 12; if (/pm/i.test(mer)) hh += 12; return hh * 60 + +mm; }
+    var endMer = m[6], startMer = m[3] || endMer;
+    var start = to24(m[1], m[2], startMer), end = to24(m[4], m[5], endMer);
+    if (start > end) start = to24(m[1], m[2], /pm/i.test(endMer) ? "am" : "pm");
+    return { start: start, end: end };
+  }
+
+  /* ---------- selection storage ---------- */
+  function loadSel() {
+    var fromHash = /[#&]c=([^&]*)/.exec(location.hash);
+    var raw = null;
+    if (fromHash) raw = decodeURIComponent(fromHash[1]);
+    else { try { raw = localStorage.getItem(STORE); } catch (e) {} }
+    state.sel = new Set((raw || "").split(",").filter(Boolean));
+  }
+  function saveSel() {
+    var list = Array.from(state.sel).sort().join(",");
+    try { localStorage.setItem(STORE, list); } catch (e) {}
+    try { history.replaceState(null, "", list ? "#c=" + encodeURIComponent(list) : location.pathname + location.search); } catch (e) {}
+  }
+
+  /* ---------- derived data ---------- */
+  function catalogue() {
+    var map = {};
+    DATA.weeks.forEach(function (w) { w.days.forEach(function (d) { d.classes.forEach(function (c) {
+      if (c.common) return;
+      var a = map[c.area] = map[c.area] || {};
+      var s = a[c.course] = a[c.course] || new Set();
+      s.add(c.section);
+    }); }); });
+    return map;
+  }
+  function areaSort(a, b) {
+    var ia = AREA_ORDER.indexOf(a), ib = AREA_ORDER.indexOf(b);
+    if (ia < 0) ia = 99; if (ib < 0) ib = 99;
+    return ia - ib || (a < b ? -1 : 1);
+  }
+  function isMine(c) { return c.common || state.sel.has(key(c)); }
+  function weekById(id) { return DATA.weeks.filter(function (w) { return w.id === id; })[0]; }
+  function defaultWeek() {
+    var weeks = DATA.weeks.slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+    var t = todayISO();
+    var cur = weeks.filter(function (w) { return w.start <= t && t <= w.end; })[0];
+    if (cur) return cur.id;
+    var next = weeks.filter(function (w) { return w.start > t; })[0];
+    return (next || weeks[weeks.length - 1] || {}).id;
+  }
+
+  /* ---------- rendering ---------- */
+  function renderWeeks() {
+    var nav = document.getElementById("weeks"); clear(nav);
+    DATA.weeks.slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; }).forEach(function (w) {
+      nav.appendChild(h("button", { class: "week", type: "button", "aria-pressed": String(w.id === state.weekId),
+        onclick: function () { state.weekId = w.id; renderAll(); } }, h("b", { text: w.label }), h("span", { text: range(w) })));
+    });
+  }
+
+  function renderPicker() {
+    var box = document.getElementById("picker"); clear(box);
+    var cat = catalogue();
+    var count = state.sel.size;
+    var head = h("div", { class: "picker-head" },
+      h("div", null,
+        h("h2", { text: "Your courses" }),
+        h("p", { text: count ? count + " selected" : "Choose a section for each course you take." })),
+      h("div", { class: "actions" },
+        count ? h("button", { class: "btn quiet", type: "button", onclick: function () { state.sel.clear(); saveSel(); state.editing = true; renderAll(); } }, "Clear all") : null,
+        count ? h("button", { class: "btn primary", type: "button", onclick: function () { state.editing = !state.editing; renderAll(); } }, state.editing ? "Done" : "Edit courses") : null));
+    box.appendChild(head);
+
+    if (!state.editing) {
+      var chips = h("div", { class: "chips" });
+      Array.from(state.sel).sort().forEach(function (k) {
+        var area = null;
+        Object.keys(cat).forEach(function (a) { var c = k.slice(0, k.lastIndexOf("-")); if (cat[a][c]) area = a; });
+        chips.appendChild(h("span", { class: "chip", style: "--a:" + areaVar(area), text: k }));
+      });
+      box.appendChild(chips);
+      return;
+    }
+
+    var areas = h("div", { class: "areas" });
+    Object.keys(cat).sort(areaSort).forEach(function (a) {
+      var g = h("div", { class: "area", style: "--a:" + areaVar(a) }, h("h3", { text: a }));
+      Object.keys(cat[a]).sort().forEach(function (course) {
+        var secs = h("div", { class: "secs" });
+        Array.from(cat[a][course]).sort().forEach(function (s) {
+          var k = course + "-" + s;
+          secs.appendChild(h("button", { class: "sec", type: "button", "aria-pressed": String(state.sel.has(k)),
+            "aria-label": course + " section " + s,
+            onclick: function () {
+              if (state.sel.has(k)) state.sel.delete(k);
+              else { Array.from(cat[a][course]).forEach(function (o) { state.sel.delete(course + "-" + o); }); state.sel.add(k); }
+              saveSel(); renderAll();
+            } }, s));
+        });
+        g.appendChild(h("div", { class: "course" }, h("span", { class: "code", text: course }), secs));
+      });
+      areas.appendChild(g);
+    });
+    box.appendChild(areas);
+    box.appendChild(h("p", { class: "hint", text: "FINPrep and SSR visits are shown to everyone. Your choice is saved on this device and in the page link." }));
+  }
+
+  function mineAt(day, slot) { return day.classes.filter(function (c) { return c.slot === slot && isMine(c); }); }
+
+  function clsEl(c, clash) {
+    return h("div", { class: "cls" + (c.common ? " common" : "") + (clash ? " clash" : ""), style: "--a:" + areaVar(c.area) },
+      h("div", { class: "name" }, code(c), clash ? h("span", { class: "tag", text: "Clash" }) : null),
+      h("div", { class: "who", text: who(c) }));
+  }
+
+  function clashes(w) {
+    var out = [];
+    w.days.forEach(function (d) { w.slots.forEach(function (s, i) {
+      var m = mineAt(d, i);
+      if (m.length > 1) out.push({ day: d, slot: s, items: m });
+    }); });
+    return out;
+  }
+
+  function renderSchedule() {
+    var out = document.getElementById("out"); clear(out);
+    var cb = document.getElementById("clashbox"); clear(cb);
+    var w = weekById(state.weekId);
+    if (!w) { out.appendChild(h("div", { class: "empty", text: "No timetable has been published yet." })); return; }
+    if (!state.sel.size) {
+      out.appendChild(h("div", { class: "empty", text: "Pick your courses above and your week will show up here." }));
+      return;
+    }
+    var t = todayISO();
+
+    var cl = clashes(w);
+    if (cl.length) {
+      var ul = h("ul");
+      cl.forEach(function (x) {
+        ul.appendChild(h("li", { text: FULL_DAY[x.day.name] + " " + dmy(x.day.date) + ", " + slotLabel(x.slot) + ": " + x.items.map(code).join(" and ") }));
+      });
+      cb.appendChild(h("div", { class: "banner clash", role: "alert" }, h("b", { text: cl.length === 1 ? "1 clash this week" : cl.length + " clashes this week" }), ul));
+    }
+
+    /* desktop grid */
+    var thead = h("tr", null, h("th", { scope: "col", text: "Day" }));
+    w.slots.forEach(function (s) { thead.appendChild(h("th", { scope: "col", text: slotLabel(s) })); });
+    var tbody = h("tbody");
+    w.days.forEach(function (d) {
+      var tr = h("tr", { class: "day-start" + (d.date === t ? " today" : "") });
+      tr.appendChild(h("th", { scope: "row" }, d.name, h("span", { text: dmy(d.date) })));
+      var any = false, cells = [];
+      w.slots.forEach(function (s, i) {
+        var m = mineAt(d, i), td = h("td");
+        if (m.length) any = true;
+        m.forEach(function (c) { td.appendChild(clsEl(c, m.length > 1)); });
+        cells.push(td);
+      });
+      if (d.note && !d.classes.length) tr.appendChild(h("td", { class: "note", colspan: String(w.slots.length), text: d.note }));
+      else if (!any) tr.appendChild(h("td", { class: "free-all", colspan: String(w.slots.length), text: "No classes" }));
+      else cells.forEach(function (td) { tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
+    out.appendChild(h("div", { class: "gridwrap" }, h("table", { class: "grid" }, h("thead", null, thead), tbody)));
+
+    /* mobile agenda */
+    var ag = h("div", { class: "agenda" });
+    w.days.forEach(function (d) {
+      var card = h("section", { class: "day" + (d.date === t ? " today" : "") },
+        h("h3", null, FULL_DAY[d.name] + ", " + dmy(d.date), d.date === t ? h("small", { text: "Today" }) : null));
+      var n = 0;
+      if (d.note && !d.classes.length) card.appendChild(h("div", { class: "noteline", text: d.note }));
+      else {
+        w.slots.forEach(function (s, i) {
+          var m = mineAt(d, i); if (!m.length) return; n++;
+          var parts = slotLabel(s).split("–");
+          var row = h("div", { class: "slot" }, h("time", null, parts[0], h("span", { text: parts[1] || "" })), h("div"));
+          m.forEach(function (c) { row.lastChild.appendChild(clsEl(c, m.length > 1)); });
+          card.appendChild(row);
+        });
+        if (!n) card.appendChild(h("div", { class: "none", text: "No classes" }));
+      }
+      ag.appendChild(card);
+    });
+    out.appendChild(ag);
+  }
+
+  function renderNext() {
+    var box = document.getElementById("nextbox"); clear(box);
+    if (!state.sel.size) return;
+    var now = new Date(), t = todayISO(), nowMin = now.getHours() * 60 + now.getMinutes(), best = null;
+    DATA.weeks.forEach(function (w) { w.days.forEach(function (d) { w.slots.forEach(function (s, i) {
+      var p = parseSlot(s); if (!p) return;
+      if (d.date < t || (d.date === t && p.start <= nowMin)) return;
+      mineAt(d, i).forEach(function (c) {
+        var k = d.date + String(p.start + 10000);
+        if (!best || k < best.k) best = { k: k, d: d, s: s, c: c };
+      });
+    }); }); });
+    if (!best) return;
+    var when = best.d.date === t ? "Today" : FULL_DAY[best.d.name] + " " + dmy(best.d.date);
+    box.appendChild(h("div", { class: "banner" }, h("b", { text: "Next class: " }), code(best.c) + " " + who(best.c) + ", " + when + ", " + slotLabel(best.s)));
+  }
+
+  function renderAll() {
+    var m = DATA.weeks[DATA.weeks.length - 1] || {};
+    document.getElementById("term").textContent = [m.programme, m.term].filter(Boolean).join(", ");
+    renderWeeks(); renderPicker(); renderNext(); renderSchedule();
+  }
+
+  /* ---------- init ---------- */
+  loadSel();
+  state.editing = state.sel.size === 0;
+  state.weekId = defaultWeek();
+  var w0 = weekById(state.weekId);
+  var last = DATA.weeks[DATA.weeks.length - 1] || {};
+  document.getElementById("foot").textContent = (last.institute ? last.institute + ". " : "") + "Always check the official timetable PDF for last-minute changes.";
+  document.getElementById("print").addEventListener("click", function () { window.print(); });
+  document.getElementById("copy").addEventListener("click", function () {
+    var btn = this, url = location.href;
+    function done() { btn.textContent = "Link copied"; setTimeout(function () { btn.textContent = "Copy link"; }, 1800); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt("Copy this link", url); });
+    else window.prompt("Copy this link", url);
+  });
+  window.addEventListener("hashchange", function () { loadSel(); renderAll(); });
+  renderAll();
+})();
+</script>
+</body>
+</html>
