@@ -539,7 +539,9 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
   state.weekId = defaultWeek();
   var w0 = weekById(state.weekId);
   var last = DATA.weeks[DATA.weeks.length - 1] || {};
-  document.getElementById("foot").textContent = (last.institute ? last.institute + ". " : "") + "Always check the official timetable PDF for last-minute changes.";
+  var foot = document.getElementById("foot");
+  foot.appendChild(h("p", { text: "Can’t find a subject in the list? It is not in any published schedule yet. It will appear here once a week that includes it is published." }));
+  foot.appendChild(h("p", { text: (last.institute ? last.institute + ". " : "") + "Always check the official timetable PDF for last-minute changes." }));
   document.getElementById("print").addEventListener("click", function () { window.print(); });
   document.getElementById("copy").addEventListener("click", function () {
     var btn = this, url = location.href;
