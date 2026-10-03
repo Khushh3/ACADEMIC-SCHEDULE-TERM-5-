@@ -19,6 +19,7 @@
   --brand-ink: #ffffff;
   --clash: #c0262d;
   --today: #fff4c2;
+  --warn: #9a6200;
   --a-MKT: #c23b55;
   --a-FIN: #2f7050;
   --a-HRM: #7a5ba8;
@@ -42,6 +43,7 @@
     --brand-ink: #0d1626;
     --clash: #ff6b72;
     --today: #3a3410;
+    --warn: #e8b04f;
     --a-MKT: #f07b92;
     --a-FIN: #5fc08c;
     --a-HRM: #b99cf0;
@@ -88,6 +90,13 @@ h1 { margin: 0; font-size: clamp(1.6rem, 4.5vw, 2.4rem); line-height: 1.05; font
 .week[aria-pressed="true"] { border-bottom-color: var(--brand); }
 .week[aria-pressed="true"] b { color: var(--brand); }
 
+/* add a week from a pdf */
+.uploadbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: -8px 0 16px; }
+.uploadbar .note { color: var(--ink-soft); font-size: 0.88rem; }
+#upmsg:empty { display: none; }
+#upmsg { margin-bottom: 14px; }
+#upmsg ul { margin: 6px 0 0; padding-left: 18px; }
+
 /* picker */
 .picker { background: var(--surface); border: 1.5px solid var(--line-strong); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
 .picker-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
@@ -110,6 +119,7 @@ h1 { margin: 0; font-size: clamp(1.6rem, 4.5vw, 2.4rem); line-height: 1.05; font
 
 /* banners */
 .banner { border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; border: 1.5px solid var(--line-strong); background: var(--surface); }
+.banner.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
 .banner.clash { border-color: var(--clash); background: color-mix(in srgb, var(--clash) 10%, var(--surface)); }
 .banner b { font-weight: 800; }
 .banner ul { margin: 6px 0 0; padding-left: 18px; }
@@ -158,7 +168,7 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
 @media print {
   @page { size: landscape; margin: 10mm; }
   body { background: #fff; color: #000; }
-  .top .actions, .weeks .week:not([aria-pressed="true"]), .picker, #nextbox { display: none !important; }
+  .top .actions, .weeks .week:not([aria-pressed="true"]), .picker, #nextbox, .uploadbar, #upmsg { display: none !important; }
   .gridwrap { display: block !important; } .agenda { display: none !important; }
   .weeks { border-bottom: 0; margin-bottom: 8px; }
   .grid td { height: auto; }
@@ -179,6 +189,13 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
   </header>
 
   <nav class="weeks" id="weeks" aria-label="Week"></nav>
+  <div class="uploadbar">
+    <button class="btn quiet" id="addpdf" type="button">Add a week from a PDF</button>
+    <input id="pdffile" type="file" accept="application/pdf,.pdf" hidden>
+    <span class="note" id="upnote">Got a newer timetable PDF? Add it here. It stays on this device only.</span>
+    <button class="btn quiet" id="rmweek" type="button" hidden>Remove this week</button>
+  </div>
+  <div id="upmsg" role="status" aria-live="polite"></div>
   <section class="picker" id="picker" aria-label="Your courses"></section>
   <div id="nextbox"></div>
   <div id="clashbox"></div>
@@ -190,7 +207,10 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
 <script>
 (function () {
   "use strict";
-  var DATA = window.TIMETABLE_DATA || { weeks: [] };
+  var BASE = window.TIMETABLE_DATA || { weeks: [] };
+  var PUBLISHED = BASE.weeks;
+  var DATA = { weeks: PUBLISHED.slice() };
+  var LOCAL_KEY = "timetable.localweeks.v1";
   var AREA_ORDER = ["MKT", "FIN", "HRM", "OPR", "BA", "ITM", "SIE"];
   var FULL_DAY = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
   var STORE = "timetable.courses.v1";
@@ -251,6 +271,25 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
     try { history.replaceState(null, "", list ? "#c=" + encodeURIComponent(list) : location.pathname + location.search); } catch (e) {}
   }
 
+  /* ---------- weeks added from a student's own PDF (kept on this device) ---------- */
+  function validWeek(w) {
+    return w && typeof w.id === "string" && Array.isArray(w.slots) && Array.isArray(w.days) &&
+      w.days.every(function (d) { return d && Array.isArray(d.classes); });
+  }
+  function loadLocal() {
+    try { var a = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]"); return Array.isArray(a) ? a.filter(validWeek) : []; }
+    catch (e) { return []; }
+  }
+  function saveLocal(list) {
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
+  }
+  function rebuild() {
+    var pub = {}; PUBLISHED.forEach(function (w) { pub[w.id] = 1; });
+    var all = loadLocal(), keep = all.filter(function (w) { return !pub[w.id]; });
+    if (keep.length !== all.length) saveLocal(keep);   /* the week has since been published */
+    DATA.weeks = PUBLISHED.concat(keep.map(function (w) { w.local = true; return w; }));
+  }
+
   /* ---------- derived data ---------- */
   function catalogue() {
     var map = {};
@@ -283,7 +322,7 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
     var nav = document.getElementById("weeks"); clear(nav);
     DATA.weeks.slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; }).forEach(function (w) {
       nav.appendChild(h("button", { class: "week", type: "button", "aria-pressed": String(w.id === state.weekId),
-        onclick: function () { state.weekId = w.id; renderAll(); } }, h("b", { text: w.label }), h("span", { text: range(w) })));
+        onclick: function () { state.weekId = w.id; renderAll(); } }, h("b", { text: w.label }), h("span", { text: range(w) + (w.local ? " (yours)" : "") })));
     });
   }
 
@@ -434,10 +473,67 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
   function renderAll() {
     var m = DATA.weeks[DATA.weeks.length - 1] || {};
     document.getElementById("term").textContent = [m.programme, m.term].filter(Boolean).join(", ");
-    renderWeeks(); renderPicker(); renderNext(); renderSchedule();
+    renderWeeks(); renderUploadBar(); renderPicker(); renderNext(); renderSchedule();
+  }
+
+  function renderUploadBar() {
+    var w = weekById(state.weekId);
+    document.getElementById("rmweek").hidden = !(w && w.local);
+    document.getElementById("upnote").textContent = w && w.local
+      ? "This week comes from a PDF you added. It is stored on this device only."
+      : "Got a newer timetable PDF? Add it here. It stays on this device only.";
+  }
+
+  function say(kind, text, list) {
+    var box = document.getElementById("upmsg"); clear(box);
+    if (!text) return;
+    var ul = null;
+    if (list && list.length) { ul = h("ul"); list.slice(0, 6).forEach(function (m) { ul.appendChild(h("li", { text: m })); }); }
+    box.appendChild(h("div", { class: "banner" + (kind ? " " + kind : "") }, text, ul));
+  }
+
+  /* ---------- add a week from a PDF ---------- */
+  var parserReady = null;
+  function loadScript(src) {
+    return new Promise(function (ok, fail) {
+      var s = document.createElement("script"); s.src = src; s.onload = ok;
+      s.onerror = function () { fail(new Error("Could not load " + src + ".")); };
+      document.head.appendChild(s);
+    });
+  }
+  function ensureParser() {
+    if (window.TimetableParser) return Promise.resolve();
+    if (!parserReady) parserReady = loadScript("vendor/pdf.min.js").then(function () { return loadScript("js/parser.js"); })
+      .catch(function (e) { parserReady = null; throw e; });
+    return parserReady;
+  }
+  async function addPdf(file) {
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { say("clash", "Please choose a PDF file."); return; }
+    if (file.size > 15 * 1024 * 1024) { say("clash", "That file is too large for a timetable PDF."); return; }
+    say("", "Reading " + file.name + "...");
+    try {
+      await ensureParser();
+      var buf = await file.arrayBuffer();
+      var res = await TimetableParser.parsePdf(new Uint8Array(buf), { weeks: PUBLISHED });
+      var w = res.week;
+      if (!res.total) throw new Error("No classes were found in it.");
+      if (PUBLISHED.some(function (p) { return p.id === w.id; })) {
+        state.weekId = w.id; renderAll();
+        say("", w.label + " (" + range(w) + ") is already published here, so there is nothing to add.");
+        return;
+      }
+      var local = loadLocal().filter(function (x) { return x.id !== w.id; }); local.push(w);
+      if (!saveLocal(local)) throw new Error("This browser would not save it. Private browsing can block saving.");
+      rebuild(); state.weekId = w.id; renderAll();
+      if (res.warnings.length) say("warn", "Added " + w.label + " (" + range(w) + "), but some parts could not be checked. Compare it with the official PDF.", res.warnings);
+      else say("", "Added " + w.label + " (" + range(w) + "). It stays on this device only.");
+    } catch (e) {
+      say("clash", "Could not read this PDF. " + e.message);
+    }
   }
 
   /* ---------- init ---------- */
+  rebuild();
   loadSel();
   state.editing = state.sel.size === 0;
   state.weekId = defaultWeek();
@@ -450,6 +546,15 @@ footer { margin-top: 28px; color: var(--ink-soft); font-size: 0.85rem; }
     function done() { btn.textContent = "Link copied"; setTimeout(function () { btn.textContent = "Copy link"; }, 1800); }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt("Copy this link", url); });
     else window.prompt("Copy this link", url);
+  });
+  document.getElementById("addpdf").addEventListener("click", function () { document.getElementById("pdffile").click(); });
+  document.getElementById("pdffile").addEventListener("change", function () {
+    var f = this.files[0]; this.value = ""; if (f) addPdf(f);
+  });
+  document.getElementById("rmweek").addEventListener("click", function () {
+    var id = state.weekId;
+    saveLocal(loadLocal().filter(function (x) { return x.id !== id; }));
+    rebuild(); state.weekId = defaultWeek(); renderAll(); say("", "Removed the week you added.");
   });
   window.addEventListener("hashchange", function () { loadSel(); renderAll(); });
   renderAll();
